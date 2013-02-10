@@ -55,7 +55,7 @@ function build() {
         exit 1
       fi
 
-      $dir/bin/release $BUILD_DIR > $BUILD_DIR/last_pack_release.out
+      $dir/bin/release $BUILD_DIR >> $BUILD_DIR/last_pack_release.out
     fi
   fi
 }
