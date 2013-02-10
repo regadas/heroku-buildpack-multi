@@ -1,23 +1,34 @@
 #!/usr/bin/env bash
 
-set -e
+# Fail fast and fail hard.
+set -eo pipefail
 
-function indent() {
-  c='s/^/       /'
-  case $(uname) in
-    Darwin) sed -l "$c";;
-    *)      sed -u "$c";;
-  esac
-}
+# Paths.
+BIN_DIR=$(cd $(dirname $0); pwd) # absolute path
+BUILD_DIR=$1
+CACHE_DIR=$2
 
 unset GIT_DIR
 
-for BUILDPACK in $(cat $1/.buildpacks); do
+# We'll need to send these statics to other scripts we `source`.
+export BUILD_DIR CACHE_DIR BIN_DIR
+
+function indent() {
+  c='s/^/ /'
+  case $(uname) in
+    Darwin) sed -l "$c";;
+    *) sed -u "$c";;
+  esac
+}
+
+function build() {
+  buildpack=$1
+
   dir=$(mktemp -t buildpackXXXXX)
   rm -rf $dir
 
-  url=${BUILDPACK%#*}
-  branch=${BUILDPACK#*#}
+  url=${buildpack%#*}
+  branch=${buildpack#*#}
 
   if [ "$branch" == "$url" ]; then
     branch=""
@@ -34,20 +45,29 @@ for BUILDPACK in $(cat $1/.buildpacks); do
 
     chmod +x $dir/bin/{detect,compile,release}
 
-    framework=$($dir/bin/detect $1)
+    framework=$($dir/bin/detect $BUILD_DIR)
 
     if [ $? == 0 ]; then
       echo "=====> Detected Framework: $framework"
-      $dir/bin/compile $1 $2
+      $dir/bin/compile $BUILD_DIR $CACHE_DIR
 
       if [ $? != 0 ]; then
         exit 1
       fi
 
-      $dir/bin/release $1 > $1/last_pack_release.out
+      $dir/bin/release $BUILD_DIR > $BUILD_DIR/last_pack_release.out
     fi
   fi
+}
+
+source $BIN_DIR/hooks/pre_compile
+
+for buildpack in $(cat $BUILD_DIR/.buildpacks); do
+  build $buildpack
 done
 
+source $BIN_DIR/hooks/post_compile
+
+
 echo "Using release configuration from last framework $framework:" | indent
-cat $1/last_pack_release.out | indent
+cat $BUILD_DIR/last_pack_release.out | indent
